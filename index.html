@@ -1,0 +1,53 @@
+<html>
+    <head>
+        <title>Editor</title>
+        <style type="text/css">
+            .text-layer {
+                font-family: Monaco, "Courier New", monospace;
+                font-size: 12px;
+                cursor: text;
+            }
+        </style>
+        <script type="text/javascript" language="javascript" src="js/jquery-1.4.4.min.js"></script>
+        <script type="text/javascript" language="javascript" src="js/json.js"></script>
+        <script type="text/javascript" language="javascript" src="js/diff_match_patch.js"></script>
+        <script type="text/javascript" language="javascript" src="js/BasicEditor.js"></script>
+        <script src="js/require.js" type="text/javascript" charset="utf-8"></script>
+        <script src="ace/build/ace/editor.js" type="text/javascript" charset="utf-8"></script>
+        <script type="text/javascript" src="http://cdn.socket.io/stable/socket.io.js"></script>
+
+
+    </head>
+    <body>
+        <div id="editor" style="width:800px; height:480px;"></div>
+        <script type="text/editor" id="jstext"></script>
+    </body>
+    <script type="text/javascript" language="javascript" src="./js/ACEEditor.js"></script>
+    <script type="text/javascript" language="javascript" src="./js/LiveDocument.js"></script>
+    <script type="text/javascript" charset="utf-8">
+
+        require({baseUrl: "ace/build"},
+        [
+            "ace/lib/event",
+            "ace/editor",
+            "ace/virtual_renderer",
+            "ace/theme/textmate",
+            "ace/document",
+            "ace/mode/javascript",
+            "ace/mode/css",
+            "ace/mode/html",
+            "ace/mode/xml",
+            "ace/mode/text",
+            "ace/undomanager",
+            "ace/range",
+        ], function(event, Editor, Renderer, theme, Document, JavaScriptMode, CssMode,
+            HtmlMode, XmlMode, TextMode, UndoManager, Range) {
+
+            var ace = new ACEEditor("editor", "jstext", [event,
+                Editor, Renderer, theme, Document, JavaScriptMode,
+                CssMode, HtmlMode, XmlMode, TextMode, UndoManager, Range]);
+            var liveDoc = new LiveDocument(ace);
+
+        });
+    </script>
+</html>
