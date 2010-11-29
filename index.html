@@ -41,11 +41,12 @@
             "ace/undomanager",
             "ace/range",
         ], function(event, Editor, Renderer, theme, Document, JavaScriptMode, CssMode,
-            HtmlMode, XmlMode, TextMode, UndoManager, Range) {
+        HtmlMode, XmlMode, TextMode, UndoManager, Range) {
 
-            var ace = new ACEEditor("editor", "jstext", [event,
+
+            var ace = new ACEEditor("editor", "jstext",  event,
                 Editor, Renderer, theme, Document, JavaScriptMode,
-                CssMode, HtmlMode, XmlMode, TextMode, UndoManager, Range]);
+                CssMode, HtmlMode, XmlMode, TextMode, UndoManager, Range);
             var liveDoc = new LiveDocument(ace);
 
         });

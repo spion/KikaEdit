@@ -4,8 +4,8 @@
  */
 
 
-var ACEEditor = function(idEd, idDoc,
-[event, Editor, Renderer, theme, Document, JavaScriptMode, CssMode, HtmlMode, XmlMode, TextMode, UndoManager, Range]) {
+var ACEEditor = function(idEd, idDoc, 
+    event, Editor, Renderer, theme, Document, JavaScriptMode, CssMode, HtmlMode, XmlMode, TextMode, UndoManager, Range) {
     var container = document.getElementById(idEd);
     var editor = new Editor(new Renderer(container, theme));
     var doc = new Document(document.getElementById(idDoc).innerHTML);
