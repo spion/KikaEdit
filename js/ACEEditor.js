@@ -6,6 +6,8 @@
 
 var ACEEditor = function(idEd, idDoc, 
     event, Editor, Renderer, theme, Document, JavaScriptMode, CssMode, HtmlMode, XmlMode, TextMode, UndoManager, Range) {
+        
+    
     var container = document.getElementById(idEd);
     var editor = new Editor(new Renderer(container, theme));
     var doc = new Document(document.getElementById(idDoc).innerHTML);
@@ -42,36 +44,96 @@ var ACEEditor = function(idEd, idDoc,
         };
     }
 
-    this.insertRemote = function(pos, text) {
-        var sel = doc.getSelection().getRange();
-        var selstart = toOffset(sel.start),
-        selend = toOffset(sel.end);
-        if (selstart >= pos) {
-            sel.start = toPosition(text.length + selstart);
-            sel.end = toPosition(text.length + selend);
+    var getContent = function(from, length) {
+        return lines.join("\n").substr(from, length);
+    }
+    var countSubStr = function (string, substr) {
+        return string.split(substr).length - 1;
+    }
+
+    this.insertRemote = function(offset, text) {
+        var insert = toPosition(offset);
+        var mypos = doc.getSelection().getRange(); var shifts;
+        if (mypos.start.row == insert.row && mypos.start.column >= insert.column) {
+            mypos.start.column += text.length;
+            mypos.end.column += text.length;
+            shifts = countSubStr(text,"\n");
+            mypos.start.row += shifts;
+            mypos.end.row += shifts;
         }
-        doc.insert(toPosition(pos), text);
-        doc.getSelection().setSelectionRange(Range.fromPoints(sel.start, sel.end));
+        else if (mypos.start.row > insert.row) {
+            shifts = countSubStr(text,"\n");
+            mypos.start.row += shifts;
+            mypos.end.row += shifts;
+        }
+        doc.insert(insert, text);
+        doc.getSelection().setSelectionRange(Range.fromPoints(mypos.start, mypos.end));
 
     }
-    this.removeRemote = function(pos, length) {
-        var sel = doc.getSelection().getRange();
-        var selstart = toOffset(sel.start),
-        selend = toOffset(sel.end);
-        if (selstart >= pos) {
-            var delta = Math.min(selstart - pos, length);
-            sel.start = toPosition(selstart - delta);
-            sel.end = toPosition(selend - delta);
+    this.removeRemote = function(offset, length) {
+        var remove = {
+            start: toPosition(offset),
+            end: toPosition(offset + length)
+        };
+        var mypos = doc.getSelection().getRange();
+        var adjustCursor = function(cursor, remRange) {
+            if (remRange.start.row < cursor.row) {
+                cursor.row -= Math.min(cursor.row, remRange.end.row) - remRange.start.row;
+            }
+            if (remRange.start.row < cursor.row && cursor.row < remRange.end.row) {
+                cursor.column = 0;
+            }
+            if (remRange.end.row == cursor.row) {
+                if (remRange.end.column < cursor.column) {
+                    if (remRange.start.row != cursor.row) { // remRange is multi-row
+                        cursor.column -= remRange.end.column;
+                    }
+                    else { // remRange is single-row
+                        cursor.column -= (remRange.end.column - remRange.start.column);
+                    }
+                }
+                else { // range ends after (or at) cursor...
+                    cursor.column = 0;
+                }
+            }
+            
+            return cursor;
         }
-        doc.remove(Range.fromPoints(toPosition(pos), toPosition(pos + length)));
-        doc.getSelection().setSelectionRange(Range.fromPoints(sel.start, sel.end));
+        mypos.start = adjustCursor(mypos.start, remove);
+        mypos.end = adjustCursor(mypos.end, remove);
+        doc.remove(Range.fromPoints(remove.start, remove.end));
+        doc.getSelection().setSelectionRange(Range.fromPoints(mypos.start, mypos.end));
     }
+
     this.addOnChange = function(callback) {
-        doc.addEventListener("change", callback);
+        doc.addEventListener("edit", function(ev) {
+            var delta = ev.data;
+            if (delta.action == "insertText") {
+                callback({
+                    type:"ins",
+                    at: toOffset(delta.range.start),
+                    text: delta.text
+                });
+            }
+            else {
+                var at = toOffset(delta.range.start);
+                callback({
+                    type:"del",
+                    at: at,
+                    length: toOffset(delta.range.end) - at
+                });
+            }
+        });
     }
+
+
+
     this.getCode = function() {
         return doc.lines.join("\n");
     }
+
+    var insK = 0;
+
 
 
 }

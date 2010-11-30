@@ -6,7 +6,8 @@
 
 var BasicEditor = function(idElem) {
 
-    var elem = document.getElementById(idElem);
+    var elem = document.getElementById(idElem),
+    self = this;
     this.insertRemote = function(pos, text) {
         var selStart = elem.selectionStart;
         var selEnd = elem.selectionEnd;
@@ -39,4 +40,6 @@ var BasicEditor = function(idElem) {
     this.getCode = function() {
         return $(elem).val();
     }
+
+
 }
