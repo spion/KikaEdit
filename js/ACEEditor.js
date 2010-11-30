@@ -53,7 +53,8 @@ var ACEEditor = function(idEd, idDoc,
 
     this.insertRemote = function(offset, text) {
         var insert = toPosition(offset);
-        var mypos = doc.getSelection().getRange(); var shifts;
+        var mypos = doc.getSelection().getRange();
+        var shifts;
         if (mypos.start.row == insert.row && mypos.start.column >= insert.column) {
             mypos.start.column += text.length;
             mypos.end.column += text.length;
@@ -75,34 +76,38 @@ var ACEEditor = function(idEd, idDoc,
             start: toPosition(offset),
             end: toPosition(offset + length)
         };
+        console.log(remove);
         var mypos = doc.getSelection().getRange();
         var adjustCursor = function(cursor, remRange) {
+            var posCursor = {
+                row: cursor.row,
+                column:cursor.column
+            };
+            console.log(posCursor)
             if (remRange.start.row < cursor.row) {
-                cursor.row -= Math.min(cursor.row, remRange.end.row) - remRange.start.row;
+                posCursor.row -= Math.min(cursor.row, remRange.end.row) - remRange.start.row;
             }
             if (remRange.start.row < cursor.row && cursor.row < remRange.end.row) {
-                cursor.column = 0;
+                console.log("cursor row between range rows")
+                posCursor.column = 0;
             }
-            if (remRange.end.row == cursor.row) {
-                if (remRange.end.column < cursor.column) {
-                    if (remRange.start.row != cursor.row) { // remRange is multi-row
-                        cursor.column -= remRange.end.column;
-                    }
-                    else { // remRange is single-row
-                        cursor.column -= (remRange.end.column - remRange.start.column);
-                    }
+            if (remRange.end.row == cursor.row) { // remrange ends on cursor's row
+                if (remRange.end.column < cursor.column) { /// ... and is before cursor...
+                    posCursor.column -= (remRange.end.column - remRange.start.column);
                 }
-                else { // range ends after (or at) cursor...
-                    cursor.column = 0;
+                else { // range ends after (or at) cursor's column...
+                    posCursor.column = 0;
                 }
             }
             
-            return cursor;
+            return posCursor;
         }
-        mypos.start = adjustCursor(mypos.start, remove);
-        mypos.end = adjustCursor(mypos.end, remove);
+        var newpos = {
+            start: adjustCursor(mypos.start, remove),
+            end: adjustCursor(mypos.end, remove)
+            };
         doc.remove(Range.fromPoints(remove.start, remove.end));
-        doc.getSelection().setSelectionRange(Range.fromPoints(mypos.start, mypos.end));
+        doc.getSelection().setSelectionRange(Range.fromPoints(newpos.start, newpos.end));
     }
 
     this.addOnChange = function(callback) {
