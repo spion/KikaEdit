@@ -42,10 +42,10 @@ var Document = function() {
     this.push = function(change) {
         var ver = change.version;
         var act = change.actions;
-        for (var k = 0; k < act.length; ++k) {
-            for (var i = ver; i < log.length; ++i) {
-                for (var j = 0; j < log[i].length; ++j) {
-                
+        
+        for (var i = ver; i < log.length; ++i) {
+            for (var j = 0; j < log[i].length; ++j) {
+                for (var k = 0; k < act.length; ++k) {
                     if (log[i][j].at <= act[k].at) {
                         if (log[i][j].type == "ins") {
                             act[k].at += log[i][j].text.length;
