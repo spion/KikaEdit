@@ -11,13 +11,36 @@ var LiveDocument = function(editor) {
     self.editor.removeRemote(0, 1);
 
     var initVersion = 0,
-        changeLog = [],
-        deltaLog = [],
-        changeTimeout = null,
-        socket = new io.Socket('spion.sytes.net');
+    changeLog = [],
+    deltaLog = [],
+    changeTimeout = null,
+    socket = new io.Socket('spion.sytes.net');
 
     this.applyEdits = function(edits) {
-        self.dumpChangeLog(); // dump changelog to socket and reset it.
+        // modify edits to account for our yet-unsent deltas. The server
+        // doesn't know about them, therefore we must syncronize them.
+        for (var k = 0; k < edits.length; ++k) {
+            for (var j = 0; j < edits[k].length; ++j) {
+                for (var i = 0; i < deltaLog.length; ++i) {
+                    if (deltaLog[i].at <= edits[k][j].at) {
+                        if (deltaLog[i].type == "ins") {
+                            edits[k][j].at += deltaLog[i].text.length;
+                        }
+                        else if (deltaLog[i].type == "del") {
+                            edits[k][j].at -= deltaLog[i].length;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Subsequent "insertRemote/removeRemote" calls will trigger onChange
+        // and fill the delta log. We will empty the deltaLog before the timeout
+        // executes because remote edits should not be pushed to the deltaLog.
+        // However, emptying the deltaLog will also remove our unsent edits,
+        // thats why we dump them at this point
+        self.dumpDeltaLog(); // dump our deltas to socket and reset them.
+        
         for (var i = 0; i < edits.length; ++i) {
             for (var j = 0; j < edits[i].length; ++j) {
                 if (edits[i][j].type == "ins") {
@@ -27,7 +50,7 @@ var LiveDocument = function(editor) {
                     try{
                         self.editor.removeRemote(edits[i][j].at, edits[i][j].length);
                     } catch (e) {
-                        console.log(e);
+                    //console.log(e);
                     }
                 }
             }
@@ -36,7 +59,7 @@ var LiveDocument = function(editor) {
         deltaLog = []; // clear delta log. these are not our edits.
     }
 
-    this.dumpChangeLog = function() {
+    this.dumpDeltaLog = function() {
         if (deltaLog.length > 0) {
             socket.send({
                 version: initVersion + changeLog.length,
@@ -53,8 +76,10 @@ var LiveDocument = function(editor) {
    
     self.editor.addOnChange(function(delta) {
         deltaLog.push(delta);
-        if (changeTimeout) { clearTimeout(changeTimeout); }
-        changeTimeout = setTimeout(self.dumpChangeLog, 250);
+        if (changeTimeout) {
+            clearTimeout(changeTimeout);
+        }
+        changeTimeout = setTimeout(self.dumpDeltaLog, 250);
     });
 
     socket.connect();

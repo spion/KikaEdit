@@ -76,19 +76,19 @@ var ACEEditor = function(idEd, idDoc,
             start: toPosition(offset),
             end: toPosition(offset + length)
         };
-        console.log(remove);
+        //console.log(remove);
         var mypos = doc.getSelection().getRange();
         var adjustCursor = function(cursor, remRange) {
             var posCursor = {
                 row: cursor.row,
                 column:cursor.column
             };
-            console.log(posCursor)
+            //console.log(posCursor)
             if (remRange.start.row < cursor.row) {
                 posCursor.row -= Math.min(cursor.row, remRange.end.row) - remRange.start.row;
             }
             if (remRange.start.row < cursor.row && cursor.row < remRange.end.row) {
-                console.log("cursor row between range rows")
+                //console.log("cursor row between range rows")
                 posCursor.column = 0;
             }
             if (remRange.end.row == cursor.row) { // remrange ends on cursor's row
