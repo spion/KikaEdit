@@ -42,30 +42,44 @@ var Document = function() {
     this.push = function(change) {
         var ver = change.version;
         var act = change.actions;
-        
-        for (var i = ver; i < log.length; ++i) {
-            for (var j = 0; j < log[i].length; ++j) {
-                for (var k = 0; k < act.length; ++k) {
-                    if (log[i][j].at <= act[k].at) {
-                        if (log[i][j].type == "ins") {
-                            act[k].at += log[i][j].text.length;
-                        }
-                        else if (log[i][j].type == "del") {
-                            act[k].at -= log[i][j].length;
-                        }
 
+        //for each chain in the log from version ver
+        for (var c = ver; c < log.length; ++c) {
+            // for each action chain
+            for (var k = 0; k < act.length; ++k) {
+                if (log[c].at <= act[k].at) {
+                    for (var e = 0; e < log[c].edits.length; ++e) {
+                        if (log[c].edits[e].ins) {
+                            act[k].at += log[c].edits[e].ins.length;
+                        }
+                        else if (log[c].edits[e].del) {
+                            act[k].at -= Math.abs(log[c].edits[e].del);
+                        }
                     }
+
                 }
             }
         }
-        log.push(act);
+
+        for (var a = 0; a < act.length; ++a) {
+            log.push(act[a]);
+        }
         for (var j = 0; j < act.length; ++j) {
-            if (act[j].type == "ins") {
-                self.insertRemote(act[j].at, act[j].text);
+            var at = act[j].at, chain = act[j].edits;
+            for (k = 0; k < chain.length; ++k) {
+                if (chain[k].ins) {
+                    self.insertRemote(at, chain[k].ins);
+                    at += chain[k].ins.length;
+                }
+                else if (chain[k].del > 0) {
+                    self.removeRemote(at, chain[k].del);
+                }
+                else if (chain[k].del < 0) {
+                    at += chain[k].del;
+                    self.removeRemote(at, 0 - chain[k].del);
+                }
             }
-            else if (act[j].type == "del") {
-                self.removeRemote(act[j].at, act[j].length);
-            }
+            
         }
         return act;
     }
@@ -82,8 +96,10 @@ socket.on('connection', function(client){
         "text":doc.getText()
     }));
     client.on('message', function(change){
-        act = doc.push(change);
-        client.broadcast(JSON.stringify([act]), client.sessionId);
+        //console.log(change);
+        act = doc.push(JSON.parse(change));
+        //console.log(doc.getText());
+        client.broadcast(JSON.stringify(act), client.sessionId);
 
     });
 });

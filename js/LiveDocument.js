@@ -31,20 +31,24 @@ var LiveDocument = function(editor) {
         // reverse-modify edits to account for our yet-unsent deltas. The server
         // doesn't know about them, therefore we must syncronize them.
 
+        //console.log(fullClone(edits));
+        var myChains = chainDeltaLog(deltaLog);
         for (var k = 0; k < edits.length; ++k) {
-            for (var j = 0; j < edits[k].length; ++j) {
-                for (var i = 0; i < deltaLog.length; ++i) {
-                    if (deltaLog[i].at < edits[k][j].at) {
-                        if (deltaLog[i].type == "ins") {
-                            edits[k][j].at += deltaLog[i].text.length;
+            for (var i = 0; i < myChains.length; ++i) {
+                if (myChains[i].at < edits[k].at) {
+                    for (var e = 0; e < myChains[i].edits.length; ++e) {
+                        if (myChains[i].edits[e].ins) {
+                            edits[k].at += myChains[i].edits[e].ins.length;
                         }
-                        else if (deltaLog[i].type == "del") {
-                            edits[k][j].at -= deltaLog[i].length;
+                        else if (myChains[i].edits[e].del) {
+                            edits[k].at -= Math.abs(myChains[i].length);
                         }
                     }
                 }
             }
+            
         }
+        //console.log(fullClone(edits));
 
         // Subsequent "insertRemote/removeRemote" calls will trigger onChange
         // and fill the delta log. We will empty the deltaLog before the timeout
@@ -53,58 +57,101 @@ var LiveDocument = function(editor) {
         // thats why we dump them at this point
         self.dumpDeltaLog(); // dump our deltas to socket and reset them.
         
-        for (var i = 0; i < edits.length; ++i) {
-            for (var j = 0; j < edits[i].length; ++j) {
-                if (edits[i][j].type == "ins") {
-                    self.editor.insertRemote(edits[i][j].at, edits[i][j].text);
+        for (var j = 0; j < edits.length; ++j) {
+            //edits consist of at: position, chain: [list of actions]
+            var at = edits[j].at, chain = edits[j].edits;
+            for (k = 0; k < chain.length; ++k) {
+                if (chain[k].ins) {
+                    self.editor.insertRemote(at, chain[k].ins);
+                    at += chain[k].ins.length;
                 }
-                else if (edits[i][j].type == "del") {
-                    try{
-                        self.editor.removeRemote(edits[i][j].at, edits[i][j].length);
-                    } catch (e) {
-                    //console.log(e);
-                    }
+                else if (chain[k].del > 0) {
+                    self.editor.removeRemote(at, chain[k].del);
+                }
+                else if (chain[k].del < 0) {
+                    at += chain[k].del;
+                    self.editor.removeRemote(at, 0 - chain[k].del);
                 }
             }
         }
+        
         changeLog = changeLog.concat(edits);
         deltaLog = []; // clear delta log. these are not our edits.
     }
 
-    var mergeDeltaLog = function(log) {
-        var mergedLog = [], k = 0;
+    var chainDeltaLog = function(log) {
+        var makeChain = function(edit1, edit2) {
+            var nextPos;
+            var e1;
+            if (edit1.type == "ins") {
+                nextPos = edit1.at + edit1.text.length;
+                e1 = {
+                    ins: edit1.text
+                };
+            }
+            else {
+                nextPos = edit1.at;
+                e1 = {
+                    del:edit1.length
+                };
+            }
+            if (edit2.type == "ins" && nextPos == edit2.at) {
+                return {
+                    ins: edit2.text
+                };
+            }
+            else if (edit2.type == "del") {
+                if (nextPos == edit2.at) { //del
+                    return {
+                        del: edit2.length
+                    }
+                }
+                else if (nextPos == edit2.at + edit2.length) { //backspace
+                    return {
+                        del: 0 - edit2.length
+                    };
+                }
+            }
+            return null;
+        }
+
+        var chainedLog = [], k = 0;
         while (k < log.length) {
-            var merger = fullClone(log[k]);
-            if (merger.type == "ins") {
-                while (k + 1 < log.length && log[k+1].type == "ins"
-                    && log[k+1].at == merger.at + merger.text.length ) {
-                    merger.text += log[k+1].text;
-                    ++k;
-                    
-                }
+            var chain = {
+                at: log[k].at,
+                edits:[
+                (log[k].type == "ins"?{
+                    ins:log[k].text
+                }:
+
+                {
+                    del:log[k].length
+                })
+                ]
+            };
+            while (k + 1 < log.length) {
+                var chainedEdit = makeChain(log[k], log[k+1]);
+                if (chainedEdit == null) break;
+                chain.edits.push(chainedEdit);
+                ++k;
             }
-            else if (merger.type == "del") {
-                while (k + 1 < log.length && log[k + 1].type == "del" &&
-                    (log[k+1].at == merger.at || log[k+1].at + log[k+1].length == merger.at)) {
-                    merger.at = log[k+1].at;
-                    merger.length += log[k+1].length;
-                    ++k;
-                }
-            }
-            mergedLog.push(merger);
+            chainedLog.push(chain);
             ++k;
         }
-        return mergedLog;
+        return chainedLog;
     };
 
     this.dumpDeltaLog = function() {
         if (deltaLog.length > 0) {
-            //Merging the delta log helps it become atomic.
-            deltaLog = mergeDeltaLog(deltaLog);
-            socket.send({
+            // Chaining the delta log causes edits which are a continuation
+            // of the cursor to become atomic. This is very desireable.
+            deltaLog = chainDeltaLog(deltaLog);
+            var jsonStr = $.toJSON({
                 version: initVersion + changeLog.length,
                 actions:deltaLog
             });
+            //console.log("Send: " + jsonStr);
+            socket.send(jsonStr);
             changeLog.push(deltaLog);
             deltaLog = [];
         }
@@ -119,11 +166,12 @@ var LiveDocument = function(editor) {
         if (changeTimeout) {
             clearTimeout(changeTimeout);
         }
-        changeTimeout = setTimeout(self.dumpDeltaLog, 250);
+        changeTimeout = setTimeout(self.dumpDeltaLog, 2250);
     });
 
     socket.connect();
     socket.on('message', function(json) {
+        //console.log("Recv: " + json);
         var data = $.parseJSON(json);
         if (data.version) {
             initVersion = data.version;
