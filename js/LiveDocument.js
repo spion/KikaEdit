@@ -195,7 +195,7 @@ var LiveDocument = function(editor) {
         if (changeTimeout) {
             clearTimeout(changeTimeout);
         }
-        changeTimeout = setTimeout(self.dumpDeltaLog, 2150);
+        changeTimeout = setTimeout(self.dumpDeltaLog, 150);
     });
 
     socket.connect();
