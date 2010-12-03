@@ -43,23 +43,24 @@ var LiveDocument = function(editor) {
         for (var c = 0; c < changelog.length; ++c) {
             // for each action chain
             for (var k = 0; k < chain.length; ++k) {
-                if (changelog[c].at <= chain[k].at) {
-                    var cAt = changelog[c].at;
-                    for (var e = 0; e < changelog[c].edits.length; ++e) {
-                        if (changelog[c].edits[e].ins) {
+                var cAt = changelog[c].at;
+                for (var e = 0; e < changelog[c].edits.length; ++e) {
+                    if (changelog[c].edits[e].ins) {
+                        if (cAt <= chain[k].at) {
                             chain[k].at += changelog[c].edits[e].ins.length;
                             cAt += changelog[c].edits[e].ins.length;
                         }
-                        else if (changelog[c].edits[e].del) {
-                            //chain[k].at -= Math.abs(changelog[c].edits[e].del);
-                            if (changelog[c].edits[e].del < 0) {
-                                cAt += changelog[c].edits[e].del;
-                            }
+                    }
+                    else if (changelog[c].edits[e].del) {
+                        //chain[k].at -= Math.abs(changelog[c].edits[e].del);
+                        if (changelog[c].edits[e].del < 0) {
+                            cAt += changelog[c].edits[e].del;
+                        }
+                        if (cAt <= chain[k].at) {
                             chain[k].at =
-                                Math.max(cAt, chain[k].at - Math.abs(changelog[c].edits[e].del));
+                            Math.max(cAt, chain[k].at - Math.abs(changelog[c].edits[e].del));
                         }
                     }
-
                 }
             }
         }
@@ -79,6 +80,7 @@ var LiveDocument = function(editor) {
                 self.editor.removeRemote(at, 0 - chain[k].del);
             }
         }
+        return at;
     }
 
     this.applyEdits = function(edits) {
@@ -97,8 +99,10 @@ var LiveDocument = function(editor) {
         deltaLog = []; 
         // we can now re-apply out old edits
         for (var k = 0; k < myChains.length; ++k) {
-            execChain(myChains[k].at, myChains[k].edits);
+            var myPos = execChain(myChains[k].at, myChains[k].edits);
+            self.editor.setCursor(myPos);
         }
+        
         // which fills deltaLog. We can now dump it to socket and reset it.
         self.dumpDeltaLog();
         
@@ -191,7 +195,7 @@ var LiveDocument = function(editor) {
         if (changeTimeout) {
             clearTimeout(changeTimeout);
         }
-        changeTimeout = setTimeout(self.dumpDeltaLog, 2333);
+        changeTimeout = setTimeout(self.dumpDeltaLog, 2150);
     });
 
     socket.connect();

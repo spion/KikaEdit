@@ -108,6 +108,10 @@ var ACEEditor = function(idEd, idDoc,
         doc.remove(Range.fromPoints(remove.start, remove.end));
         doc.getSelection().setSelectionRange(Range.fromPoints(newpos.start, newpos.end));
     }
+    this.setCursor = function(offset) {
+        var pos = toPosition(offset);
+        doc.getSelection().setSelectionRange(Range.fromPoints(pos, pos));
+    }
 
     this.addOnChange = function(callback) {
         doc.addEventListener("edit", function(ev) {
