@@ -99,7 +99,6 @@ var ACEEditor = function(idEd, idDoc,
                     posCursor.column = 0;
                 }
             }
-            
             return posCursor;
         }
         var newpos = {
@@ -117,7 +116,8 @@ var ACEEditor = function(idEd, idDoc,
                 callback({
                     type:"ins",
                     at: toOffset(delta.range.start),
-                    text: delta.text
+                    text: delta.text,
+                    length: delta.text.length
                 });
             }
             else {
@@ -125,19 +125,16 @@ var ACEEditor = function(idEd, idDoc,
                 callback({
                     type:"del",
                     at: at,
+                    text: delta.text.length,
                     length: toOffset(delta.range.end) - at
                 });
             }
         });
     }
 
-
-
     this.getCode = function() {
         return doc.lines.join("\n");
     }
-
-    var insK = 0;
 
 
 

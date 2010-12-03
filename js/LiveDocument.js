@@ -27,131 +27,79 @@ var LiveDocument = function(editor) {
     changeTimeout = null,
     socket = new io.Socket('spion.sytes.net');
 
-    this.applyEdits = function(edits) {
-        // reverse-modify edits to account for our yet-unsent deltas. The server
-        // doesn't know about them, therefore we must syncronize them.
 
-        //console.log(fullClone(edits));
-        var myChains = chainDeltaLog(deltaLog);
-        for (var k = 0; k < edits.length; ++k) {
-            for (var i = 0; i < myChains.length; ++i) {
-                if (myChains[i].at < edits[k].at) {
-                    for (var e = 0; e < myChains[i].edits.length; ++e) {
-                        if (myChains[i].edits[e].ins) {
-                            edits[k].at += myChains[i].edits[e].ins.length;
-                        }
-                        else if (myChains[i].edits[e].del) {
-                            edits[k].at -= Math.abs(myChains[i].length);
-                        }
-                    }
-                }
+    var undoEdits = function(edits) {
+        for (var i = edits.length - 1; i >= 0; --i) {
+            if (edits[i].type == "del") {
+                self.editor.insertRemote(edits[i].at, edits[i].text);
             }
-            
-        }
-        //console.log(fullClone(edits));
-
-        // Subsequent "insertRemote/removeRemote" calls will trigger onChange
-        // and fill the delta log. We will empty the deltaLog before the timeout
-        // executes because remote edits should not be pushed to the deltaLog.
-        // However, emptying the deltaLog will also remove our unsent edits,
-        // thats why we dump them at this point
-        self.dumpDeltaLog(); // dump our deltas to socket and reset them.
-        
-        for (var j = 0; j < edits.length; ++j) {
-            //edits consist of at: position, chain: [list of actions]
-            var at = edits[j].at, chain = edits[j].edits;
-            for (k = 0; k < chain.length; ++k) {
-                if (chain[k].ins) {
-                    self.editor.insertRemote(at, chain[k].ins);
-                    at += chain[k].ins.length;
-                }
-                else if (chain[k].del > 0) {
-                    self.editor.removeRemote(at, chain[k].del);
-                }
-                else if (chain[k].del < 0) {
-                    at += chain[k].del;
-                    self.editor.removeRemote(at, 0 - chain[k].del);
-                }
+            else if (edits[i].type == "ins") {
+                self.editor.removeRemote(edits[i].at, edits[i].length);
             }
         }
-        
-        changeLog = changeLog.concat(edits);
-        deltaLog = []; // clear delta log. these are not our edits.
     }
 
-    var chainDeltaLog = function(log) {
-        var makeChain = function(edit1, edit2) {
-            var nextPos;
-            var e1;
-            if (edit1.type == "ins") {
-                nextPos = edit1.at + edit1.text.length;
-                e1 = {
-                    ins: edit1.text
-                };
-            }
-            else {
-                nextPos = edit1.at;
-                e1 = {
-                    del:edit1.length
-                };
-            }
-            if (edit2.type == "ins" && nextPos == edit2.at) {
-                return {
-                    ins: edit2.text
-                };
-            }
-            else if (edit2.type == "del") {
-                if (nextPos == edit2.at) { //del
-                    return {
-                        del: edit2.length
+    var syncDeltas = function(deltas, changelog) {
+        for (var i = 0; i < changelog.length; ++i) {
+            for (var j = 0; j < changelog[i].length; ++j) {
+                for (var k = 0; k < deltas.length; ++k) {
+                    if (changelog[i][j].at <= deltas[k].at) {
+                        if (changelog[i][j].type == "ins") {
+                            deltas[k].at += changelog[i][j].text.length;
+                        }
+                        else if (changelog[i][j].type == "del") {
+                            deltas[k].at = 
+                                Math.min(deltas[k].at - changelog[i][j].length, changelog[i][j].at);
+                        }
+
                     }
                 }
-                else if (nextPos == edit2.at + edit2.length) { //backspace
-                    return {
-                        del: 0 - edit2.length
-                    };
-                }
             }
-            return null;
         }
+    }
 
-        var chainedLog = [], k = 0;
-        while (k < log.length) {
-            var chain = {
-                at: log[k].at,
-                edits:[
-                (log[k].type == "ins"?{
-                    ins:log[k].text
-                }:
+    this.execEdit = function(edit) {
+        if (edit.type == "ins") {
+            self.editor.insertRemote(edit.at, edit.text);
+        }
+        else if (edit.type == "del") {
+            self.editor.removeRemote(edit.at,edit.length);
+        }
+    }
+    this.applyEdits = function(edits) {
+        // remember, then undo our deltas,  then sync them.
+        var syncedDeltas = fullClone(deltaLog);
+        undoEdits(syncedDeltas);
+        syncDeltas(syncedDeltas, edits);
 
-                {
-                    del:log[k].length
-                })
-                ]
-            };
-            while (k + 1 < log.length) {
-                var chainedEdit = makeChain(log[k], log[k+1]);
-                if (chainedEdit == null) break;
-                chain.edits.push(chainedEdit);
-                ++k;
+        // Apply the other user's edits first
+        // then sync the changeLog with server's changelog
+        for (i = 0; i < edits.length; ++i) {
+            for (j = 0; j < edits[i].length; ++j) {
+                self.execEdit(edits[i][j]);
             }
-            chainedLog.push(chain);
-            ++k;
         }
-        return chainedLog;
-    };
+        changeLog = changeLog.concat(edits);
+
+        // at this point the deltaLog is full of stuff we didn't do caused
+        // by insertRemote and removeRemote usage. we need to reset it to nothing
+        // and then re-apply our synced deltas
+        deltaLog = [];
+        for (j = 0; j < syncedDeltas.length; ++j) {
+            self.execEdit(syncedDeltas[j]);
+        }
+        // which also re-fills deltaLog again. this is a good moment to
+        // dump our edits to the server.
+        self.dumpDeltaLog();
+
+    }
 
     this.dumpDeltaLog = function() {
         if (deltaLog.length > 0) {
-            // Chaining the delta log causes edits which are a continuation
-            // of the cursor to become atomic. This is very desireable.
-            deltaLog = chainDeltaLog(deltaLog);
-            var jsonStr = $.toJSON({
+            socket.send({
                 version: initVersion + changeLog.length,
                 actions:deltaLog
             });
-            //console.log("Send: " + jsonStr);
-            socket.send(jsonStr);
             changeLog.push(deltaLog);
             deltaLog = [];
         }
@@ -166,12 +114,11 @@ var LiveDocument = function(editor) {
         if (changeTimeout) {
             clearTimeout(changeTimeout);
         }
-        changeTimeout = setTimeout(self.dumpDeltaLog, 250);
+        changeTimeout = setTimeout(self.dumpDeltaLog, 2250);
     });
 
     socket.connect();
     socket.on('message', function(json) {
-        //console.log("Recv: " + json);
         var data = $.parseJSON(json);
         if (data.version) {
             initVersion = data.version;

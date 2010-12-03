@@ -38,48 +38,42 @@ var Document = function() {
         curText = curText.substr(0, at)
         + curText.substr(at + len);
     }
-    
+    this.execEdit = function(edit) {
+        if (edit.type == "ins") {
+            self.insertRemote(edit.at, edit.text);
+        }
+        else if (edit.type == "del") {
+            self.removeRemote(edit.at,edit.length);
+        }
+    }
+
+    var syncDeltas = function(deltas, changelog) {
+        for (var i = 0; i < changelog.length; ++i) {
+            for (var j = 0; j < changelog[i].length; ++j) {
+                for (var k = 0; k < deltas.length; ++k) {
+                    if (changelog[i][j].at <= deltas[k].at) {
+                        if (changelog[i][j].type == "ins") {
+                            deltas[k].at += changelog[i][j].text.length;
+                        }
+                        else if (changelog[i][j].type == "del") {
+                            //deltas[k].at -= changelog[i][j].length;
+                            deltas[k].at =
+                                Math.min(deltas[k].at - changelog[i][j].length, changelog[i][j].at);
+                        }
+
+                    }
+                }
+            }
+        }
+    }
+
     this.push = function(change) {
         var ver = change.version;
         var act = change.actions;
-
-        //for each chain in the log from version ver
-        for (var c = ver; c < log.length; ++c) {
-            // for each action chain
-            for (var k = 0; k < act.length; ++k) {
-                if (log[c].at <= act[k].at) {
-                    for (var e = 0; e < log[c].edits.length; ++e) {
-                        if (log[c].edits[e].ins) {
-                            act[k].at += log[c].edits[e].ins.length;
-                        }
-                        else if (log[c].edits[e].del) {
-                            act[k].at -= Math.abs(log[c].edits[e].del);
-                        }
-                    }
-
-                }
-            }
-        }
-
-        for (var a = 0; a < act.length; ++a) {
-            log.push(act[a]);
-        }
+        syncDeltas(act, log.slice(ver));
+        log.push(act);
         for (var j = 0; j < act.length; ++j) {
-            var at = act[j].at, chain = act[j].edits;
-            for (k = 0; k < chain.length; ++k) {
-                if (chain[k].ins) {
-                    self.insertRemote(at, chain[k].ins);
-                    at += chain[k].ins.length;
-                }
-                else if (chain[k].del > 0) {
-                    self.removeRemote(at, chain[k].del);
-                }
-                else if (chain[k].del < 0) {
-                    at += chain[k].del;
-                    self.removeRemote(at, 0 - chain[k].del);
-                }
-            }
-            
+            self.execEdit(act[j]);
         }
         return act;
     }
@@ -96,10 +90,8 @@ socket.on('connection', function(client){
         "text":doc.getText()
     }));
     client.on('message', function(change){
-        //console.log(change);
-        act = doc.push(JSON.parse(change));
-        //console.log(doc.getText());
-        client.broadcast(JSON.stringify(act), client.sessionId);
+        act = doc.push(change);
+        client.broadcast(JSON.stringify([act]), client.sessionId);
 
     });
 });
