@@ -44,7 +44,7 @@ var LiveDocument = function(editor) {
             // for each action chain
             for (var k = 0; k < chain.length; ++k) {
                 if (changelog[c].at <= chain[k].at) {
-                    var cAt = chain[k].at;
+                    var cAt = changelog[c].at;
                     for (var e = 0; e < changelog[c].edits.length; ++e) {
                         if (changelog[c].edits[e].ins) {
                             chain[k].at += changelog[c].edits[e].ins.length;
@@ -191,7 +191,7 @@ var LiveDocument = function(editor) {
         if (changeTimeout) {
             clearTimeout(changeTimeout);
         }
-        changeTimeout = setTimeout(self.dumpDeltaLog, 2250);
+        changeTimeout = setTimeout(self.dumpDeltaLog, 2333);
     });
 
     socket.connect();
